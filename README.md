@@ -36,7 +36,7 @@ For unpacking STAGE.DAT from ZoE2, check [ArmsDepot](https://github.com/Joy-Divi
 Dumps the sections found in efx files produced by sdx-extract and splits up the sequence block into individual sequences.
 
 ## mdx-parser
-Walks through a mdx file produced by sdx-extract and prints the encountered events. Does not produce any output besides this.
+Walks through a mdx file produced by sdx-extract and prints the encountered events. Now includes MGS2 events (also compatible with ZOE1 and ZOE2)! Does not produce any output besides this.
 
 ## mdx-splitter
 Dumps the individual tracks found in mdx files produced by sdx-extract.
@@ -57,12 +57,12 @@ Converts the subtitles from pss-demux into ready-to-use srt files. Japanese subt
 Converts the tex files found inside the unpacked ZOE.DAT into either PNG or raw RGBA images (see below for limitations).
 
 ## wvx-extract
-Splits the wvx files produced by sdx-extract into ready to play vag files. Note that some files will throw errors or lock up players due to only containing the EOF marker.
+Splits the wvx files produced by sdx-extract into ready to play vag files. Note that some files will throw errors or lock up players due to only containing the EOF marker. (Now samples receive the expected sample rate, as defined in the entry flags!)
 
 # Current limitations
 
 ## mdx-parser
-All events are currently interpreted in the same way as MGS1, resulting in possible inaccuracies and leaving a lot of unknown events
+The parser alone isn't enough to replicate the actual behavior, as it doesn't explain how everything works in full detail. If you're interested in doing something with it, you should check the original code yourself.
 
 ## tex-to_image
 The tex files contain bitmaps which can contain multiple subtextures, each with their own palette. Currently, for each subtexture the containing bitmap is output completely while applying the subtextures palette.

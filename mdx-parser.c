@@ -12,6 +12,8 @@
 #include "kojimasound/kojimasound.h"
 //~ #include <smf.h>
 
+//for MGS2 and forward, this is incorrect, as the frequency table wraps around after D6, and goes into negative octaves (!)
+//the table itself has size of 129, where the last frequency is equal to the first one
 char *midinotes[128] = {
 	"C0", "C#0", "D0", "D#0", "E0", "F0", "F#0", "G0", "G#0", "A0", "A#0", "B0",
 	"C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1", "A#1", "B1",
@@ -91,181 +93,421 @@ int main( int argc, char **argv ) {
 	for(cursong = 0;cursong < numsongs;cursong++) {
 		fseek(f, 4+(4*cursong), SEEK_SET);
 		fread(&songoffset, 4, 1, f);
-		printf("Song %d - Offset: %08x\n", cursong, songoffset);
+		printf("Song %d - Offset: %#08x\n", cursong, songoffset);
 		fseek(f, songoffset, SEEK_SET);
 		fread(tracklist, tracklistsize, 1, f);
 		for(curtrack = 0;curtrack < numtracks;curtrack++) {
-			sprintf(outputname, "song%05d-track%05d.bin", cursong, curtrack);
+			int tabs = 1, loop1 = 0, loop2 = 0, loop3 = 0, bracket = 0, fx_track = 0, 
+				kakko_flag = 0, kakko_ptr1 = 0, kakko_ptr2 = 0;
+			sprintf(outputname, "song%02d-track%02d.bin", cursong, curtrack);
 			curtoken = 0;
 			if( !(o = fopen( outputname, "wb" ))) {
 				printf("Couldnt open file %s\n", outputname);
 				return 1;
 			}
-			printf("Song %d - Track %02d - Offset: %08x\n", cursong, curtrack, tracklist[curtrack]);
+			printf("Song %d - Track %02d - Offset: %#08x\n", cursong, curtrack, tracklist[curtrack]);
 			fseek(f, tracklist[curtrack], SEEK_SET);
 			
 			/* smf stuffs */
 			//~ track = smf_track_new();
 			
-			while(curtoken != 0xFFFE0000) {
-				printf("\t");
-				fread(&curtoken, 4, 1, f);
+			while((curtoken & 0xFFFF0000) != 0xFFFE0000) {
+								
+				if (fread(&curtoken, 4, 1, f) == 0){
+					break;
+				}
 				
 				event = curtoken >> 24;
 				param0 = (curtoken >> 16) & 0xFF;
 				param1 = (curtoken >> 8) & 0xFF;
 				param2 = curtoken & 0xFF;
 				
+				switch(event){
+					case 0xDB:
+						if(fx_track > 0) fx_track -= 1;
+						break;
+					case 0xE8:
+						if (loop1 > 0) loop1 -= 1;
+						break;
+					case 0xEA:
+						if (loop2 > 0) loop2 -= 1;
+						break;
+					case 0xEC:
+						if (loop3 > 0) loop3 -= 1;
+						break;
+					case 0xEE:
+						if (bracket > 0 && (kakko_flag == 1)) bracket -= 1;
+						break;
+				}
+				
+				tabs = 1 + loop1 + loop2 + loop3 + bracket + fx_track;
+					
+				for (int i = 0; i < tabs; i++){
+					printf("\t");
+				}
+				
 				if(event < 0x80 ) {
 					/* possible midi note */
 					note = event;
-					snap = param0;
-					length = param1;
+					snap = param0; //internal name is STEP
+					length = param1; //internal name is GATE
 					velocity = param2;
-					printf("Encountered note %x(%s)\n", note, midinotes[note]);
-					printf("\tsnap %x - length %x - velocity %x\n", snap, length, velocity);
+					printf("Note %#x(%s) === ", note, midinotes[note]);
+					printf("steps:%#x - gate:%#x - vel:%#x\n", snap, length, velocity);
 				}
 				else {
 					switch(event) {
+						case 0xCD:{
+							//for explanation on Automations, see command 0xF8
+							printf("Automation 6 Set at %#08x, params 0x%02X (volume) 0x%02X (position/timer)\n", (unsigned int)ftell(f)-4, param0, param1);
+							break;
+						}
+						case 0xCE:{
+							printf("Automation 7 Set at %#08x, params 0x%02X (volume) 0x%02X (position/timer)\n", (unsigned int)ftell(f)-4, param0, param1);
+							break;
+						}
+						case 0xCF:{
+							printf("Automation 8 Set at %#08x, params 0x%02X (volume) 0x%02X (position/timer)\n", (unsigned int)ftell(f)-4, param0, param1);
+							break;
+						}
 						case 0xD0: {
-							printf("Encountered Tempo event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Tempo Set at %#08x, params: 0x%02X\n", (unsigned int)ftell(f)-4, param0);
 							break;
 						}
 						
 						case 0xD1: {
-							printf("Encountered Decrease event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Tempo Slide (++/--) at %#08x, params 0x%02X (steps) 0x%02X (target tempo)\n", (unsigned int)ftell(f)-4, param0, param1);
 							break;
 						}
 						
 						case 0xD2: {
-							printf("Encountered Instrument A event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Set Instrument A at %#08x, params 0x%02X (tone)\n", (unsigned int)ftell(f)-4, param0);
 							break;
 						}
 						
 						case 0xD3: {
-							printf("Encountered Instrument B event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Set Instrument B at %#08x, params 0x%02X (tone)\n", (unsigned int)ftell(f)-4, param0);
 							break;
 						}
 						
 						case 0xD4: {
-							printf("Encountered Instrument C event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Set Instrument C at %#08x, params 0x%02X (tone)\n", (unsigned int)ftell(f)-4, param0);
 							break;
 						}
 						
 						case 0xD5: {
-							printf("Encountered Change Master Volume event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Track Volume Set at %#08x, params 0x%02X (vol)\n", (unsigned int)ftell(f)-4, param0);
 							break;
 						}
 						
 						case 0xD6: {
-							printf("Encountered Fade out event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Volume Slide at %#08x, params 0x%02X (steps) 0x%02X (target)\n", (unsigned int)ftell(f)-4, param0, param1);
 							break;
 						}
 						
 						case 0xD7: {
-							printf("Encountered Change Channel Volume event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							//sets attack mode to linear
+							//AR = 127 - (param0 & 0x7f)
+							//DR = 15 - (param1 & 0x0f)
+							//SL = (param2 & 0x0f)
+							printf("ADS Envelope Set at %#08x, params 0x%02X(AR) 0x%02X(DR) 0x%02X(SL)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
 							break;
 						}
 						
 						case 0xD8: {
-							printf("Encountered Fade out note event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							//sets sustain mode to LINEAR DECREASE
+							//SR = 127 - (param0 & 0x7f)
+							printf("Sustain Rate Set at %#08x, params 0x%02X (SR)\n", (unsigned int)ftell(f)-4, param0);
+							break;
+						}
+						
+						case 0xD9: {
+							//sets release mode to linear
+							//RR = 31 - (param0 & 0x1f)
+							printf("Release Rate Set at %#08x, params 0x%02X (RR)\n", (unsigned int)ftell(f)-4, param0);
+							break;
+						}
+						
+						case 0xDA: {
+							printf("FX Track Start Set at %#08x, params 0x%02X (WaitMode) 0x%02X (WaitTimeBase) 0x%02X (addr)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							fx_track += 1;
+							break;
+						}
+						
+						case 0xDB: {
+							printf("FX Track End Set at %#08x\n", (unsigned int)ftell(f)-4);
+							break;
+						}
+						
+						case 0xDC: { //to get the correct frame, multiply by 28/16
+						unsigned int offset_addr = (param0 << 12) | (param1 << 4);
+							printf("Sample Address Offset Set at %#08x, address:%#04x (PCM frame:%d)\n", (unsigned int)ftell(f)-4, offset_addr, (offset_addr>>4)*28);
 							break;
 						}
 						
 						case 0xDD: {
-							printf("Encountered Pan event at %08x, complete event %08x\n", (unsigned int)ftell(f)-4, curtoken);
+							//when pan mod == 0, panning is set as the default value the current instrument uses (mainly drums)
+							//when pan mod == 1, set it according to pan phase parameter
+							//when pan mod == 2, SURROUND MODE is set (uses the panning set by the mixer)
+							unsigned int left, right;
+							unsigned int panning = (param1 + 0x14) & 0xff; 
+							if (panning > 40) panning = 40;
+							left = 40 - panning, right = panning;
+							
+							printf("Panning Set at %#08x, params 0x%02X (pan mod) 0x%02X (pan phase) :: ", (unsigned int)ftell(f)-4, param0, param1);
+							if(left == right) { printf("CENTER"); }
+							else if (left > right) { printf("%d%% left", (int)((20-right)*5)); }
+							else 				   { printf("%d%% right",(int)((20-left)*5));  }
+							printf("\n");
+							
 							break;
 						}
 						
-						/*
+
 						case 0xDE: {
-							printf("Encountered Pan1 event at %08x, complete event %08x\n", (unsigned int)ftell(f)-4, curtoken);
+							
+							unsigned int left, right;
+							unsigned int panning = (param1 + 0x14) & 0xff; 
+							if (panning > 40) panning = 40;
+							left = 40 - panning, right = panning;
+							
+							printf("Panning Slide at %#08x, params 0x%02X (steps) 0x%02X (target) :: ", (unsigned int)ftell(f)-4, param0, param1);
+							if(left == right) { printf("CENTER"); }
+							else if (left > right) { printf("%d%% left", (int)((right)*5)); }
+							else { printf("%d%% right", (int)((left)*5)); }
+							printf("\n");
+							
 							break;
 						}
-						*/
+
 						
 						case 0xDF: {
-							printf("Encountered Pitch event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Transpose Set at %#08x, params 0x%02X (value)\n", (unsigned int)ftell(f)-4, param0);
 							break;
 						}
 						
 						case 0xE0: {
-							printf("Encountered Pitch note when changed event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Detune Set at %#08x, params 0x%02X (value)\n", (unsigned int)ftell(f)-4, param0);
+							break;
+						}
+						
+						case 0xE1: {
+							//hold counter: how many steps the command must wait to be executed
+							printf("Vibrato Set at %#08x, params 0x%02X (hold counter) 0x%02X(speed) 0x%02X (depth)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							break;
+						}
+						
+						case 0xE2: {
+							printf("Vibrato Change at %#08x, params 0x%02X (change counter)\n", (unsigned int)ftell(f)-4, param0);
 							break;
 						}
 						
 						case 0xE3: {
-							printf("Encountered Modulation event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("LFO Set at %#08x, params 0x%02X (speed) 0x%02X 0x%02X :: DEPTH == 0x%04X\n", (unsigned int)ftell(f)-4, param0, param1, param2, (param1 << 8) | param2);
+							break;
+						}
+						
+						case 0xE4: {
+							printf("Slide to Note event at %#08x, params 0x%02X (hold counter) 0x%02X (step) 0x%02X (target)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
 							break;
 						}
 						
 						case 0xE5: {
-							printf("Encountered Swirl up note event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Sweep Set at %#08x, params 0x%02X (hold counter) 0x%02X (speed) 0x%02X (depth)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
 							break;
 						}
 						
 						case 0xE6: {
-							printf("Encountered Pitch bend on change event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Portamento Set at %#08x, params 0x%02X (speed)\n", (unsigned int)ftell(f)-4, param0);
 							break;
 						}
 						
 						case 0xE7: {
-							printf("Encountered Set Loop Start (MEMORY A) event at %08x, complete event %08x\n", (unsigned int)ftell(f)-4, curtoken);
+							printf("Set Block Loop Start event at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
+							loop1 += 1;
 							break;
 						}
 						
 						case 0xE8: {
-							printf("Encountered Set Loop End (MEMORY A) (repeat PARAM0 times) event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Set Block Loop End (repeat PARAM0 times) at %#08x, params %02d (count) 0x%02X (add vol) 0x%02X (add freq)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
 							break;
 						}
 						
-						case 0xE9: {
-							printf("Encountered Set Loop Start (MEMORY B) event at %08x, complete event %08x\n", (unsigned int)ftell(f)-4, curtoken);
+						case 0xE9: { //so it seems that this is to allow block loops (outer) inside block loops (inner)
+							printf("Set (Outer) Block Loop Start at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
+							loop2 += 1;
 							break;
 						}
 						
 						case 0xEA: {
-							printf("Encountered Set Loop End (MEMORY B) (repeat PARAM0 times) event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Set (Outer) Loop End (repeat PARAM0 times) at %#08x, params %02d (count) 0x%02X (add vol) 0x%02X (add freq)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
 							break;
 						}
 						
 						case 0xEB: {
-							printf("Encountered Set Loop Start event at %08x, complete event %08x\n", (unsigned int)ftell(f)-4, curtoken);
+							printf("Set Song Loop Start at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
+							loop3 += 1;
 							break;
 						}
 						
 						case 0xEC: {
-							printf("Encountered Set Loop End event at %08x, complete event %08x\n", (unsigned int)ftell(f)-4, curtoken);
+							printf("Set Song Loop End at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
 							break;
 						}
 						
 						case 0xED: {
-							printf("Encountered Set Loop Start (0xED) event at %08x, complete event %08x\n", (unsigned int)ftell(f)-4, curtoken);
+							kakko_ptr1 = (unsigned int)ftell(f)-4;
+							printf("Set Loop Start (brackets) at %#08x, save current position\n", kakko_ptr1);
+							bracket += 1;
+							kakko_flag = 0;
 							break;
 						}
 						
 						case 0xEE: {
-							printf("Encountered Set Loop End (0xEE) (two per 0xED) event at %08x, complete event %08x\n", (unsigned int)ftell(f)-4, curtoken);
+							//this command works as follows:
+							//when ED is used, it saves the current position on data, and sets a flag to 0
+							//this bracket flag is then used by the EE command to dictate its behavior:
+							//when flag == 0, flag += 1, end of operation
+							//when flag == 1, saves this new position, moves the pointer to the position set by ED 
+								//and flag += 1, end of operation
+							//when flag == 2, moves the pointer to the position set when flag was 1, then flag -=1, end of operation
+							switch(kakko_flag){
+								case 0:
+									printf("Set Loop End (brackets) event at %#08x, flag: 0\n", (unsigned int)ftell(f)-4);
+									kakko_flag += 1;
+									break;
+								case 1:
+									kakko_ptr2 = (unsigned int)ftell(f)-4;
+									printf("Set Loop End (brackets) event at %#08x, move back to 0x%08x and save current position (flag: 1)\n", kakko_ptr2, kakko_ptr1);
+									kakko_flag += 1;
+									break;
+								case 2:
+									printf("Set Loop End (brackets) event at %#08x, move back to 0x%08x (flag: 2)\n", (unsigned int)ftell(f)-4, kakko_ptr2);
+									kakko_flag -= 1;
+									break;
+							}
+							break;
+						}
+						
+						case 0xEF: {
+							printf("Start FX on separate track at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
+							break;
+						}
+						
+						case 0xF0: {
+							printf("Track-specific volume shift at %#08x, params 0x%02X (track index) 0x%02X (steps) 0x%02X (target)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							break;
+						}
+						
+						case 0xF1: {
+							//ATTACK MODES:
+							//		0: LINEAR
+							//		else: EXPONENTIAL
+							//SUSTAIN MODES:
+							//		0: LINEAR DECREASE(?)
+							//		1: EXPONENTIAL DECREASE(?)
+							//		2: LINEAR INCREASE(?)
+							//		else: EXPONENTIAL INCREASE(?)
+							//RELEASE MODES:
+							//		0: LINEAR
+							//		else: EXPONENTIAL
+							printf("Envelope Modes Set at %#08x, params 0x%02X (AM) 0x%02X (SM) 0x%02X (RM)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
 							break;
 						}
 						
 						case 0xF2: {
-							printf("Encountered Silence A event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Rest Set at %#08x, params 0x%02X (steps)\n", (unsigned int)ftell(f)-4, param0);
 							break;
 						}
 						
-						case 0xF3: {
-							printf("Encountered Silence B event at %08x, parameters %02x %02x %02x\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+						case 0xF3: { //its purpose is to extend the current note's duration
+									//you can apply effects like vol slide or sweep during the tie duration too
+							printf("Tie Set at %#08x, params 0x%02X (steps) 0x%02X (gate)\n", (unsigned int)ftell(f)-4, param0, param1);
 							break;
 						}
 						
+						case 0xF4: {
+							//only ECHO (7) and DELAY (8) modes receive the parameters for delay and feedback
+							//ROOM (1), STUDIO A/B/C (2,3,4), HALL (5), SPACE (6) and PIPE (9) remain with default values
+							//any value outside of [1, 9] is treated as OFF
+							printf("Echo Mode Set event at %#08x, params 0x%02X (mode) 0x%02X (delay) 0x%02X (feedback)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							break;
+						}
+						
+						case 0xF5: {
+							printf("Echo Depth (Stereo) Set at %#08x, params 0x%02X (depth LEFT) 0x%02X (depth RIGHT)\n", (unsigned int)ftell(f)-4, param0, param1);
+							break;
+						}
+						
+						case 0xF6: { 
+							printf("Echo ON at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
+							break;
+						}
+						
+						case 0xF7: { 
+							printf("Echo OFF at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
+							break;
+						}
+											//FADER AUTOMATION COMMANDS
+						case 0xF8: {
+							//when using an automation command, the volume value set carries over
+							//for the next automations, while the timers are either set to 0 or 0xff, 
+							//depending on what mode is set when command 0xF8 is executed (0 or 1)
+							//FOR EXAMPLE: the volume set with command 0xF9 (which is Automation 2 Set)
+							//would also be applied to Automation 3-8 (copied over to the rest).
+							//Automation 2 would have its timer set to whatever param1 is
+							//and every other automation after 2 (so from 3 to 8) would be either 0 or 0xff
+							//if I need Automation 3 to be different, it would require usage of command 0xFA
+							//(by logic, that would overwrite the volumes for Automations 4 to 8 too)
+							printf("Automation 1 Set at %#08x, params 0x%02X (volume) 0x%02X (timer) 0x%02X (mode)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							break;
+						}
+						case 0xF9: {
+							printf("Automation 2 Set at %#08x, params 0x%02X (volume) 0x%02X (timer)\n", (unsigned int)ftell(f)-4, param0, param1);
+							break;
+						}
+						case 0xFA: {
+							printf("Automation 3 Set at %#08x, params 0x%02X (volume) 0x%02X (timer)\n", (unsigned int)ftell(f)-4, param0, param1);
+							break;
+						}
+						case 0xFB: {
+							printf("Automation 4 Set at %#08x, params 0x%02X (volume) 0x%02X (timer)\n", (unsigned int)ftell(f)-4, param0, param1);
+							break;
+						}
+						case 0xFC: {
+							printf("Automation 5 Set at %#08x, params 0x%02X (volume) 0x%02X (timer)\n", (unsigned int)ftell(f)-4, param0, param1);
+							break;
+						}
+						case 0xFD:{
+							//this is seemingly a command to override a track playback with a memory stream
+							//not clear how it's used yet, would need to find an example in a file
+							printf("Tone Set MNO Set at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
+							break;
+						}
+						case 0xFE:{
+							//another command I can't quite figure out what it means
+							printf("Flag Control Code at %#08x, ", (unsigned int)ftell(f)-4);
+							switch(param0){
+								case 0:{
+									printf("set track flag for first-person mode to 0x%02X\n", param1);
+									//flag to prevent volume from being lowered in first-person mode
+									break;
+								}
+								case 1:{
+									printf("override reverb value to 0x%02X\n", param1);
+									//disregards the current SE mode
+									break;
+								}
+							}
+							break;
+						}
 						case 0xFF: {
-							printf("Encountered End Of Track event at %08x, complete event %08x\n", (unsigned int)ftell(f)-4, curtoken);
+							printf("End Of Track at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
 							break;
 						}
 						
 						default: {
-							printf("Unknown event %x at %08x\n", curtoken, (unsigned int)ftell(f)-4);
+							printf("Unknown event %#x at %#08x\n", curtoken, (unsigned int)ftell(f)-4);
 							break;
 						}
 					}
