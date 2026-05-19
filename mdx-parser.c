@@ -12,8 +12,9 @@
 #include "kojimasound/kojimasound.h"
 //~ #include <smf.h>
 
-//for MGS2 and forward, this is incorrect, as the frequency table wraps around after D6, and goes into negative octaves (!)
+//this might be incorrect, as the frequency table for MGS2 wraps around after D6, and goes into negative octaves (!)
 //the table itself has size of 129, where the last frequency is equal to the first one
+//won't modify this yet, unless I find a case where negative octaves are actually used (I think it's unlikely)
 char *midinotes[128] = {
 	"C0", "C#0", "D0", "D#0", "E0", "F0", "F#0", "G0", "G#0", "A0", "A#0", "B0",
 	"C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1", "A#1", "B1",
@@ -111,7 +112,7 @@ int main( int argc, char **argv ) {
 			/* smf stuffs */
 			//~ track = smf_track_new();
 			
-			while((curtoken & 0xFFFF0000) != 0xFFFE0000) {
+			while((curtoken & 0xFFFF0000) != 0xFFFE0000) { //might need to change this to (curtoken & 0xFF000000) != 0xFF000000
 								
 				if (fread(&curtoken, 4, 1, f) == 0){
 					break;
@@ -246,15 +247,15 @@ int main( int argc, char **argv ) {
 						}
 						
 						case 0xDD: {
-							//when pan mod == 0, panning is set as the default value the current instrument uses (mainly drums)
-							//when pan mod == 1, set it according to pan phase parameter
-							//when pan mod == 2, SURROUND MODE is set (uses the panning set by the mixer)
+							//when mode == 0, panning is set as the default value the current instrument uses (mainly drums)
+							//when mode == 1, set it according to pan phase parameter
+							//when mode == 2, SURROUND MODE is set (uses the panning set by the mixer)
 							unsigned int left, right;
 							unsigned int panning = (param1 + 0x14) & 0xff; 
 							if (panning > 40) panning = 40;
 							left = 40 - panning, right = panning;
 							
-							printf("Panning Set at %#08x, params 0x%02X (pan mod) 0x%02X (pan phase) :: ", (unsigned int)ftell(f)-4, param0, param1);
+							printf("Panning Set at %#08x, params 0x%02X (mode) 0x%02X (phase) :: ", (unsigned int)ftell(f)-4, param0, param1);
 							if(left == right) { printf("CENTER"); }
 							else if (left > right) { printf("%d%% left", (int)((20-right)*5)); }
 							else 				   { printf("%d%% right",(int)((20-left)*5));  }
@@ -307,8 +308,8 @@ int main( int argc, char **argv ) {
 							break;
 						}
 						
-						case 0xE4: {
-							printf("Slide to Note event at %#08x, params 0x%02X (hold counter) 0x%02X (step) 0x%02X (target)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+						case 0xE4: { //the command table had a placeholder for this command, and the actual method is called within the sound handler  
+							printf("Slide to Note event at %#08x, params 0x%02X (hold counter) 0x%02X (speed) 0x%02X (target)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
 							break;
 						}
 						
@@ -322,7 +323,7 @@ int main( int argc, char **argv ) {
 							break;
 						}
 						
-						case 0xE7: {
+						case 0xE7: { //(inner block)
 							printf("Set Block Loop Start event at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
 							loop1 += 1;
 							break;
@@ -406,7 +407,7 @@ int main( int argc, char **argv ) {
 							break;
 						}
 						
-						case 0xF2: {
+						case 0xF2: { //note off in this sequence format
 							printf("Rest Set at %#08x, params 0x%02X (steps)\n", (unsigned int)ftell(f)-4, param0);
 							break;
 						}
@@ -421,6 +422,7 @@ int main( int argc, char **argv ) {
 							//only ECHO (7) and DELAY (8) modes receive the parameters for delay and feedback
 							//ROOM (1), STUDIO A/B/C (2,3,4), HALL (5), SPACE (6) and PIPE (9) remain with default values
 							//any value outside of [1, 9] is treated as OFF
+							//unless I'm remembering it wrong, default being used by the game is HALL
 							printf("Echo Mode Set event at %#08x, params 0x%02X (mode) 0x%02X (delay) 0x%02X (feedback)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
 							break;
 						}
@@ -476,7 +478,7 @@ int main( int argc, char **argv ) {
 							break;
 						}
 						case 0xFE:{
-							//another command I can't quite figure out what it means
+							//another command I can't quite grasp fully
 							printf("Flag Control Code at %#08x, ", (unsigned int)ftell(f)-4);
 							switch(param0){
 								case 0:{
@@ -486,7 +488,7 @@ int main( int argc, char **argv ) {
 								}
 								case 1:{
 									printf("override reverb value to 0x%02X\n", param1);
-									//disregards the current SE mode
+									//it's stated in the code it disregards the current SE mode
 									break;
 								}
 							}
