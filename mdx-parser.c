@@ -98,7 +98,7 @@ int main( int argc, char **argv ) {
 		fread(tracklist, tracklistsize, 1, f);
 		for(curtrack = 0;curtrack < numtracks;curtrack++) {
 			int tabs = 1, loop1 = 0, loop2 = 0, loop3 = 0, bracket = 0, fx_track = 0, 
-				kakko_flag = 0, kakko_ptr1 = 0, kakko_ptr2 = 0;
+				kakko_flag = 0;
 			sprintf(outputname, "song%02d-track%02d.bin", cursong, curtrack);
 			curtoken = 0;
 			if( !(o = fopen( outputname, "wb" ))) {
@@ -356,8 +356,7 @@ int main( int argc, char **argv ) {
 						}
 						
 						case 0xED: {
-							kakko_ptr1 = (unsigned int)ftell(f)-4;
-							printf("Set Loop Start (brackets) at %#08x, save current position\n", kakko_ptr1);
+							printf("Set Loop Start (brackets) at %#08x, save current position\n", (unsigned int)ftell(f)-4);
 							bracket += 1;
 							kakko_flag = 0;
 							break;
@@ -371,20 +370,12 @@ int main( int argc, char **argv ) {
 							//when flag == 1, saves this new position, moves the pointer to the position set by ED 
 								//and flag += 1, end of operation
 							//when flag == 2, moves the pointer to the position set when flag was 1, then flag -=1, end of operation
-							switch(kakko_flag){
-								case 0:
-									printf("Set Loop End (brackets) event at %#08x, flag: 0\n", (unsigned int)ftell(f)-4);
-									kakko_flag += 1;
-									break;
-								case 1:
-									kakko_ptr2 = (unsigned int)ftell(f)-4;
-									printf("Set Loop End (brackets) event at %#08x, move back to 0x%08x and save current position (flag: 1)\n", kakko_ptr2, kakko_ptr1);
-									kakko_flag += 1;
-									break;
-								case 2:
-									printf("Set Loop End (brackets) event at %#08x, move back to 0x%08x (flag: 2)\n", (unsigned int)ftell(f)-4, kakko_ptr2);
-									kakko_flag -= 1;
-									break;
+							printf("Set Loop End (brackets) event at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
+							if(kakko_flag < 2){
+								kakko_flag += 1;
+							}
+							else{
+								kakko_flag -= 1;
 							}
 							break;
 						}

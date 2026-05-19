@@ -72,7 +72,7 @@ char *processLineJp( char *line, unsigned int len ) {
 	cd = iconv_open("UTF-8", "EUC-JP");
 	#ifdef _WIN32
 	const char *linein = (const char *)line;
-	iconv(cd, &linein, &inbufsize, &workbuf, &outbufsize);
+	iconv(cd, (char **)&linein, &inbufsize, &workbuf, &outbufsize);
 	#else
 	iconv(cd, &line, &inbufsize, &workbuf, &outbufsize);
 	#endif
