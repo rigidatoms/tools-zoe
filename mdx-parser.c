@@ -247,9 +247,9 @@ int main( int argc, char **argv ) {
 						}
 						
 						case 0xDD: {
-							//when mode == 0, panning is set as the default value the current instrument uses (mainly drums)
-							//when mode == 1, set it according to pan phase parameter
-							//when mode == 2, SURROUND MODE is set (uses the panning set by the mixer)
+							//when mode == 0, if the current instrument is changed, the panning returns to default position
+							//when mode == 1, panning remains in this set position, regardless of instrument change
+							//when mode == 2, uses the panning set in the mixer
 							unsigned int left, right;
 							unsigned int panning = (param1 + 0x14) & 0xff; 
 							if (panning > 40) panning = 40;
@@ -441,7 +441,7 @@ int main( int argc, char **argv ) {
 							printf("Echo OFF at %#08x, complete event %#08x\n", (unsigned int)ftell(f)-4, curtoken);
 							break;
 						}
-											//FADER AUTOMATION COMMANDS
+											//MIXER AUTOMATION COMMANDS
 						case 0xF8: {
 							//when using an automation command, the volume value set carries over
 							//for the next automations, while the timers are either set to 0 or 0xff, 
@@ -452,23 +452,23 @@ int main( int argc, char **argv ) {
 							//and every other automation after 2 (so from 3 to 8) would be either 0 or 0xff
 							//if I need Automation 3 to be different, it would require usage of command 0xFA
 							//(by logic, that would overwrite the volumes for Automations 4 to 8 too)
-							printf("Automation 1 Set at %#08x, params 0x%02X (volume) 0x%02X (timer) 0x%02X (mode)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
+							printf("Automation 1 Set at %#08x, params 0x%02X (volume) 0x%02X (position/timer) 0x%02X (mode)\n", (unsigned int)ftell(f)-4, param0, param1, param2);
 							break;
 						}
 						case 0xF9: {
-							printf("Automation 2 Set at %#08x, params 0x%02X (volume) 0x%02X (timer)\n", (unsigned int)ftell(f)-4, param0, param1);
+							printf("Automation 2 Set at %#08x, params 0x%02X (volume) 0x%02X (position/timer)\n", (unsigned int)ftell(f)-4, param0, param1);
 							break;
 						}
 						case 0xFA: {
-							printf("Automation 3 Set at %#08x, params 0x%02X (volume) 0x%02X (timer)\n", (unsigned int)ftell(f)-4, param0, param1);
+							printf("Automation 3 Set at %#08x, params 0x%02X (volume) 0x%02X (position/timer)\n", (unsigned int)ftell(f)-4, param0, param1);
 							break;
 						}
 						case 0xFB: {
-							printf("Automation 4 Set at %#08x, params 0x%02X (volume) 0x%02X (timer)\n", (unsigned int)ftell(f)-4, param0, param1);
+							printf("Automation 4 Set at %#08x, params 0x%02X (volume) 0x%02X (position/timer)\n", (unsigned int)ftell(f)-4, param0, param1);
 							break;
 						}
 						case 0xFC: {
-							printf("Automation 5 Set at %#08x, params 0x%02X (volume) 0x%02X (timer)\n", (unsigned int)ftell(f)-4, param0, param1);
+							printf("Automation 5 Set at %#08x, params 0x%02X (volume) 0x%02X (position/timer)\n", (unsigned int)ftell(f)-4, param0, param1);
 							break;
 						}
 						case 0xFD:{
@@ -482,13 +482,13 @@ int main( int argc, char **argv ) {
 							printf("Flag Control Code at %#08x, ", (unsigned int)ftell(f)-4);
 							switch(param0){
 								case 0:{
-									printf("set track flag for first-person mode to 0x%02X\n", param1);
+									printf("set track flag for first-person mode to 0x%02X\n", param2);
 									//flag to prevent volume from being lowered in first-person mode
 									break;
 								}
 								case 1:{
-									printf("override reverb value to 0x%02X\n", param1);
-									//it's stated in the code it disregards the current SE mode
+									printf("override reverb value to 0x%02X\n", param2);
+									//sets reverb based on track information regardless of SE mode
 									break;
 								}
 							}

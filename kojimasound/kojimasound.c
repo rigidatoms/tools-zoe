@@ -101,7 +101,10 @@ void processWvx( FILE *f, unsigned int baseoffset, char *folder, unsigned int nu
 			else samplerate = 11025;
 		}
 		else {
-			if(sampleentry.flags > 0x7F000000) {
+			//if(sampleentry.flags > 0x7F000000) {
+			//UPDATE 05/21/2026: there must be a meaning to the value on the first byte, but I don't know how to find it...
+			//the last two bytes do fit as micro and macro, though
+			if((sampleentry.flags & 0xFFFF) != 0){
 				//This is a guess on how to get the correct sample rate for the instruments:
 				//In the source, they grab two bytes from the sound wave struct named micro (tuning) and macro (pitch/note)
 				//and combine the data with the note input to form the frequency at which the sample should be played.
@@ -136,6 +139,8 @@ void processWvx( FILE *f, unsigned int baseoffset, char *folder, unsigned int nu
 				freq = ((pl * tune) >> 8) + (ph * tune);   /* Tuning * Semitone frequency */
 				freq += freq_tbl[note];		/* Add the frequency corresponding to the note to <freq> */
 				
+				//vgmstream doesn't seem to like when the .vag's sample rate is too high
+				//I wonder why?
 				samplerate = freq*44100.0/3761; //we're using 3761 as 44100Hz
 			}
 			else samplerate = 22050;
