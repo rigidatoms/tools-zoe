@@ -2,7 +2,7 @@ All commands in a sequence file (.mdx) are bundled in 4 bytes. A command may or 
 
 When the command's first byte has a value equal or above 0x80, it should be processed before a new note input is found or until the song reaches the end. The following three bytes are used as parameters. A command doesn't necessarily use all three, if any. Here follows every special command found in the MGS2 song format:
 
-| Command (byte) | Parameter(s) (3 bytes) | Description |
+| Command (byte) | Parameter(s) <br>(3 bytes) | Description |
 | :-------: | :-------: | ------------- |
 | 0xCD | <ul><li>Volume</li><li>Position/Timer</li></ul> | Set **Automation 6**.<br> See command 0xF8 for further explanation on Automations. |
 | 0xCE | <ul><li>Volume</li><li>Position/Timer</li></ul> | Set **Automation 7**.<br> See command 0xF8 for further explanation on Automations. |
@@ -53,5 +53,5 @@ When the command's first byte has a value equal or above 0x80, it should be proc
 |0xFB|<ul><li>Volume</li><li>Position/Timer</li></ul>|Set **Automation 4**.<br> See command 0xF8 for further explanation on Automations. |
 |0xFC|<ul><li>Volume</li><li>Position/Timer</li></ul>|Set **Automation 5**.<br> See command 0xF8 for further explanation on Automations. |
 |0xFD|<ul> <li>Tone number</li> <li>Wave index (MSB)</li> <li>Wave index (LSB)</li> </ul>|Specify **tone for memory streaming**. The actual tone number is 0x100 + the tone number specified in the command. <br>(Wave index is only used if parameter 1 equals 0xFF and parameter 2 & 0xF0 equals 0xF0, then the bytes are combined as follows: `wave_index_LSB \| ((wave_index_MSB & 0xF) << 8))`. This is used for an address override.)|
-|0xFE|<ul> <li>Flag</li> <li>Value</li> </ul>|**Flag Control Code.** When flag is set to 0, set track flag for first-person mode to specified value. When flag is set to 1, override reverb value to specified values, disregarding the current SE (Sound Effect) mode.|
+|0xFE|<ul> <li>Flag</li> <li>Value</li> </ul>|**Flag Control Code.** When flag is set to 0, set track flag for first-person mode to specified value. When flag is set to 1, override reverb value to specified value, disregarding the current SE (Sound Effect) mode.|
 |0xFF|*-&emsp;None*|Set **End of Track**.|
