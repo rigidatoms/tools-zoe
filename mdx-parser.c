@@ -12,9 +12,6 @@
 #include "kojimasound/kojimasound.h"
 //~ #include <smf.h>
 
-//this might be incorrect, as the frequency table for MGS2 wraps around after D6, and goes into negative octaves (!)
-//the table itself has size of 129, where the last frequency is equal to the first one
-//won't modify this yet, unless I find a case where negative octaves are actually used (I think it's unlikely)
 char *midinotes[128] = {
 	"C0", "C#0", "D0", "D#0", "E0", "F0", "F#0", "G0", "G#0", "A0", "A#0", "B0",
 	"C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1", "A#1", "B1",
